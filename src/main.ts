@@ -1,20 +1,29 @@
 import { WebAudioEngine } from './core/AudioEngine';
 import { GameLoop } from './core/GameLoop';
+import { ProgressStore } from './core/ProgressStore';
 import { StateMachine } from './core/StateMachine';
 import { Stations } from './entities/Stations';
 import type { Rect } from './entities/CustomerQueue';
 import {
   HUD_FULLSCREEN_RECT,
   HUD_MUTE_RECT,
+  HUD_PAUSE_RECT,
   OVERLAY_PRIMARY_RECT,
   OVERLAY_SECONDARY_RECT,
+  OVERLAY_SHOP_RECT,
   ProceduralArt,
+  SHOP_BACK_RECT,
+  SHOP_PLAY_RECT,
   TITLE_PLAY_RECT,
+  TITLE_SHOP_RECT,
   VIRTUAL_HEIGHT,
   VIRTUAL_WIDTH,
 } from './render/ProceduralArt';
 
-export const MIN_HITBOX_SIZE = 48;
+export const MIN_HITBOX_SIZE = 44;
+
+const PAUSE_RESUME_RECT: Rect = { x: 320, y: 290, w: 320, h: 56 };
+const PAUSE_QUIT_RECT: Rect = { x: 355, y: 370, w: 250, h: 48 };
 
 interface VirtualPoint {
   x: number;
@@ -77,6 +86,10 @@ class ViewportMapper {
     }
   }
 
+  public isPortraitMobile(): boolean {
+    return this.cssHeight > this.cssWidth && this.cssWidth < 680;
+  }
+
   public clientToVirtual(clientX: number, clientY: number): VirtualPoint {
     const rect = this.canvas.getBoundingClientRect();
     const localX = clientX - rect.left;
@@ -89,7 +102,7 @@ class ViewportMapper {
 
   public beginFrame(ctx: CanvasRenderingContext2D): void {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.fillStyle = '#121212';
+    ctx.fillStyle = '#0F172A';
     ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
     ctx.save();
@@ -179,36 +192,42 @@ function bootstrap(): void {
 
   const viewport = new ViewportMapper(canvasEl);
   const audio = new WebAudioEngine();
+  const progress = new ProgressStore();
   const stations = new Stations(audio);
   const queue = stations.getCustomerQueue();
   const art = new ProceduralArt();
   const fsm = new StateMachine('TITLE');
 
-  let currentShift = 1;
+  let currentShift = progress.getHighestShift();
   let toast: ToastMessage | null = null;
   let activePointerId: number | null = null;
   let pointerStart: VirtualPoint | null = null;
   let pointerRoutedToStations = false;
 
-  const showToast = (text: string, duration = 3.2): void => {
+  const showToast = (text: string, duration = 2.6): void => {
     toast = { text, remaining: duration, duration };
   };
 
   const startShift = (shiftNumber: number): void => {
     currentShift = Math.max(1, shiftNumber);
-    stations.resetForShift(currentShift);
+    stations.resetForShift(currentShift, progress.getUpgrades(), progress.getWalletRM());
     fsm.transition('SHIFT_INTRO');
   };
 
   fsm
     .register('TITLE', {
       onRender: (c) => {
-        art.renderTitle(c, audio.isMuted(), viewport.dpr);
+        art.renderTitle(c, progress.getData(), audio.isMuted());
+      },
+    })
+    .register('SHOP', {
+      onRender: (c) => {
+        art.renderShop(c, progress.getData(), currentShift);
       },
     })
     .register('SHIFT_INTRO', {
       onUpdate: () => {
-        if (fsm.getElapsed() >= 1.3) {
+        if (fsm.getElapsed() >= 1.45) {
           fsm.transition('PLAYING');
         }
       },
@@ -220,9 +239,15 @@ function bootstrap(): void {
       onUpdate: (dt) => {
         stations.update(dt);
         if (queue.isShiftTimeUp()) {
-          if (queue.didMeetTarget()) {
+          const metTarget = queue.didMeetTarget();
+          const stars = queue.getStarsEarned();
+          progress.recordShiftResult(currentShift, queue.cashRM, metTarget, stars);
+          stations.setWalletRM(progress.getWalletRM());
+          if (metTarget) {
+            audio.playShiftWin();
             fsm.transition('SHIFT_SUMMARY');
           } else {
+            audio.playShiftFail();
             fsm.transition('GAME_OVER');
           }
         }
@@ -239,6 +264,7 @@ function bootstrap(): void {
     })
     .register('SHIFT_SUMMARY', {
       onRender: (c) => {
+        art.renderGameplay(c, stations.getSnapshot(), audio.isMuted());
         art.renderShiftSummary(
           c,
           stations.getSnapshot(),
@@ -249,6 +275,7 @@ function bootstrap(): void {
     })
     .register('GAME_OVER', {
       onRender: (c) => {
+        art.renderGameplay(c, stations.getSnapshot(), audio.isMuted());
         art.renderGameOver(c, stations.getSnapshot(), queue.servedCount);
       },
     });
@@ -256,21 +283,62 @@ function bootstrap(): void {
   const handleUiTap = (point: VirtualPoint): boolean => {
     const state = fsm.getState();
 
-    // Top HUD Mute & Fullscreen buttons available on TITLE and PLAYING
+    // Top HUD controls
     if (state === 'TITLE' || state === 'PLAYING') {
       if (hitTest(point, HUD_MUTE_RECT)) {
         audio.setMuted(!audio.isMuted());
-        showToast(audio.isMuted() ? 'Audio Muted' : 'Audio On', 1.6);
+        showToast(audio.isMuted() ? 'Audio Muted' : 'Audio On', 1.4);
         return true;
       }
       if (hitTest(point, HUD_FULLSCREEN_RECT)) {
         void toggleFullscreen(showToast);
         return true;
       }
+      if (state === 'PLAYING' && hitTest(point, HUD_PAUSE_RECT)) {
+        audio.playClick();
+        fsm.transition('PAUSED');
+        return true;
+      }
     }
 
-    if (state === 'TITLE' && hitTest(point, TITLE_PLAY_RECT)) {
-      startShift(1);
+    if (state === 'TITLE') {
+      if (hitTest(point, TITLE_PLAY_RECT)) {
+        audio.playClick();
+        startShift(progress.getHighestShift());
+        return true;
+      }
+      if (hitTest(point, TITLE_SHOP_RECT)) {
+        audio.playClick();
+        currentShift = progress.getHighestShift();
+        fsm.transition('SHOP');
+        return true;
+      }
+      return false;
+    }
+
+    if (state === 'SHOP') {
+      if (hitTest(point, SHOP_BACK_RECT)) {
+        audio.playClick();
+        fsm.transition('TITLE');
+        return true;
+      }
+      if (hitTest(point, SHOP_PLAY_RECT)) {
+        audio.playClick();
+        startShift(currentShift);
+        return true;
+      }
+      const upgradeKey = art.getShopCardAt(point.x, point.y);
+      if (upgradeKey) {
+        if (progress.purchaseUpgrade(upgradeKey)) {
+          audio.playUpgrade();
+          showToast('Kitchen Upgraded!', 1.8);
+        } else if (progress.getUpgradeCost(upgradeKey) === null) {
+          showToast('Already at Max Level!', 1.5);
+        } else {
+          showToast('Not enough RM! Play a shift to earn more.', 1.8);
+        }
+        return true;
+      }
       return true;
     }
 
@@ -280,11 +348,13 @@ function bootstrap(): void {
     }
 
     if (state === 'PAUSED') {
-      if (hitTest(point, OVERLAY_PRIMARY_RECT)) {
+      if (hitTest(point, PAUSE_RESUME_RECT)) {
+        audio.playClick();
         fsm.transition('PLAYING');
         return true;
       }
-      if (hitTest(point, OVERLAY_SECONDARY_RECT)) {
+      if (hitTest(point, PAUSE_QUIT_RECT)) {
+        audio.playClick();
         fsm.transition('TITLE');
         return true;
       }
@@ -293,10 +363,18 @@ function bootstrap(): void {
 
     if (state === 'SHIFT_SUMMARY') {
       if (hitTest(point, OVERLAY_PRIMARY_RECT)) {
+        audio.playClick();
         startShift(currentShift + 1);
         return true;
       }
+      if (hitTest(point, OVERLAY_SHOP_RECT)) {
+        audio.playClick();
+        currentShift = currentShift + 1;
+        fsm.transition('SHOP');
+        return true;
+      }
       if (hitTest(point, OVERLAY_SECONDARY_RECT)) {
+        audio.playClick();
         fsm.transition('TITLE');
         return true;
       }
@@ -305,10 +383,17 @@ function bootstrap(): void {
 
     if (state === 'GAME_OVER') {
       if (hitTest(point, OVERLAY_PRIMARY_RECT)) {
+        audio.playClick();
         startShift(currentShift);
         return true;
       }
+      if (hitTest(point, OVERLAY_SHOP_RECT)) {
+        audio.playClick();
+        fsm.transition('SHOP');
+        return true;
+      }
       if (hitTest(point, OVERLAY_SECONDARY_RECT)) {
+        audio.playClick();
         fsm.transition('TITLE');
         return true;
       }
@@ -332,9 +417,7 @@ function bootstrap(): void {
   };
 
   const onPointerDown = (e: PointerEvent): void => {
-    // Unlock Web Audio on the very first pointerdown anywhere on canvas
     audio.unlock();
-
     if (activePointerId !== null) return;
     activePointerId = e.pointerId;
     const pt = viewport.clientToVirtual(e.clientX, e.clientY);
@@ -349,7 +432,9 @@ function bootstrap(): void {
     const state = fsm.getState();
     const isHudHit =
       (state === 'TITLE' || state === 'PLAYING') &&
-      (hitTest(pt, HUD_MUTE_RECT) || hitTest(pt, HUD_FULLSCREEN_RECT));
+      (hitTest(pt, HUD_MUTE_RECT) ||
+        hitTest(pt, HUD_FULLSCREEN_RECT) ||
+        (state === 'PLAYING' && hitTest(pt, HUD_PAUSE_RECT)));
 
     if (state === 'PLAYING' && !isHudHit) {
       pointerRoutedToStations = true;
@@ -415,7 +500,9 @@ function bootstrap(): void {
           toast = null;
         }
       }
-      fsm.update(dt);
+      if (!viewport.isPortraitMobile()) {
+        fsm.update(dt);
+      }
     },
     onRender: () => {
       viewport.beginFrame(ctx);
@@ -427,6 +514,9 @@ function bootstrap(): void {
           (toast.duration - toast.remaining) / 0.2
         );
         art.renderToast(ctx, toast.text, alpha);
+      }
+      if (viewport.isPortraitMobile()) {
+        art.renderRotateHint(ctx);
       }
       viewport.endFrame(ctx);
     },

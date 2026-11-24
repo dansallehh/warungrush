@@ -1,107 +1,81 @@
-# Warung Rush
+# Warung Rush v2.0
 
-**Night Market Kitchen Sprint** — a fast-paced Malaysian *warung* / *pasar malam* cooking and time-management game built with TypeScript, HTML5 Canvas, and Web Audio.
+**Tropical Warung Kitchen Sprint** — a fast-paced 2.5D Malaysian *warung* cooking and time-management game inspired by *Cooking Crush*, built with TypeScript, HTML5 Canvas, and Web Audio.
 
 ### Play Now
 **[https://dansallehh.github.io/warungrush/](https://dansallehh.github.io/warungrush/)**
 
-*(Mobile-first portrait layout with touch & mouse support. Installable as a PWA — on iOS Safari, tap **Share → Add to Home Screen** for fullscreen play.)*
+*(Built for a wide 16:9 landscape counter with touch & mouse support. Installable as a PWA — on mobile, rotate to landscape or add to Home Screen for fullscreen play.)*
 
 ---
 
-## Game Summary
+## What's New in v2.0
 
-Step behind the hot griddle (*kuali*) of a bustling Malaysian night market stall and keep hungry customers fed before their patience runs out.
-
-- **75-Second Shifts**: Each shift gives you 75 seconds to reach your cash target (starting at **RM 45** in Shift 1 and increasing by **+RM 25** each shift).
-- **Escalating Menu & Pace**: Master **Roti Canai** and **Teh Tarik** in Shift 1, then unlock the multi-step **Burger Ramly** from Shift 2 onwards as customers arrive faster and grow more impatient.
-- **Tactile Gestures**: Swipe to stretch dough, chop veggies, and flip food on the kuali; hold-and-release to pull frothy Teh Tarik; drag and tap to assemble and serve.
-- **Combo & Tip System**: Serve customers while they still have more than half their patience left to trigger **Layan!** combos (up to **x5**) and earn extra tips.
-- **Zero External Assets**: Procedural 2D Canvas visuals and synthesized Web Audio sound effects in a lightweight web app.
+- **2.5D Tropical Beachside Warung & Glossy UI**: Bright coastal backdrop with swaying palms, wooden boardwalk, stainless-steel perspective counter with chrome side rails, cast-iron pans, ceramic blue-rimmed plates, expressive 2.5D customers, and glossy 3D-beveled buttons & HUD.
+- **Kitchen Upgrade Shop**: Earn persistent **RM** coins every shift (kept even if you miss the target!) and invest in **6 multi-level upgrades** saved in `localStorage`:
+  - **Kuali Griddle** (2 → 3 → 4 pans + faster cooking)
+  - **Teh Tarik Urn** (1 → 2 → 3 ready cups + faster pull & wider sweet spot)
+  - **Serving Plates** (2 → 3 → 4 ceramic plates)
+  - **Prep Board** (fewer swipes to stretch/chop + bigger veggie stock yield)
+  - **Premium Spices** (+RM 1 / +RM 3 base price on every dish)
+  - **Warung Lights** (+15% / +30% customer patience + bigger tips + festive counter lights)
+- **New Dish & Customer**: **Roti Telur** unlocks in Shift 3, and **Kakak Foodie** joins the 4-slot customer rail alongside **Pak Cik**, **Office Rush**, and **Lepak**.
+- **Flying Dishes, 3-Star Shift Ratings & LAYAN FEVER**: Dishes arc to customers on serve; reach **x4+ combo** to ignite **LAYAN FEVER** for **2x tips**!
 
 ---
 
 ## Game Manual
 
-### Kitchen Layout
+### Kitchen Layout (Landscape Counter)
 
 | Zone | Location | Purpose |
 | --- | --- | --- |
-| **Top HUD** | Top bar | Shows current Shift, Cash / Target (RM), Timer, Combo, **Mute**, and **Fullscreen** controls |
-| **Customer Rail** | Upper screen (3 slots) | Displays waiting customers, their requested dishes, and patience bars |
-| **Teh Tarik Station** | Left | Hold-to-pull dispenser for brewing Teh Tarik |
-| **Kuali (Griddle)** | Center (2 slots: `KUALI 1`, `KUALI 2`) | Cooks Roti, Patties, Eggs, and holds Wrapped Burgers |
-| **Serving Plate** | Below Kuali | Holds one finished food dish (`Roti Canai` or `Burger Ramly`) ready to serve |
-| **Prep Board** | Right | Used to stretch Roti dough and chop vegetables |
+| **Top HUD** | Top bar | Shift & Combo badge, golden Cash / Target progress bar with 3-Star milestones, Timer, **Fullscreen**, **Mute**, and **Pause** buttons |
+| **Customer Rail** | Upper counter (4 slots) | Expressive customers with glossy order bubbles and vertical patience bars |
+| **Teh Tarik Station** | Left | Upper urn to **hold-and-pull** tea; lower drip tray holds 1–3 ready cups |
+| **Kuali Griddle** | Center-Left (2–4 pans) | Cast-iron pans for Roti, Patties, Eggs, and Wrapped Burgers |
+| **Serving Plates** | Center-Right (2–4 plates) | Ceramic plates holding finished food ready to serve |
+| **Prep Board** | Far-Right | Butcher-block board for stretching Roti dough and chopping veggies |
 | **Ingredient & Tool Dock** | Bottom | `DOUGH`, `PATTY`, `EGG`, `VEG`, `SAUCE`, `WRAP`, and `TRASH` |
 
 ---
 
-### Menu & Recipes
+### Menu & Recipes (Gesture Controls)
 
-#### 1. Teh Tarik — **RM 3** *(Available from Shift 1)*
-1. Press and **hold** the **Teh Tarik** dispenser to start pulling tea.
-2. **Release** when the gauge is inside the **target zone (75%–90%)** to finish (`Tarik!`).
-   - Releasing below 75% resets the cup.
-   - Holding past 90% overflows the cup (`Tumpah!`) and locks the dispenser for 1 second.
-3. **Serve** the ready cup to a customer.
+#### 1. Teh Tarik — **RM 4+** *(Shift 1+)*
+1. Press and **hold** the upper **Teh Tarik Urn** to pour.
+2. **Release** inside the **green target zone** to add a frothy cup to the ready tray (`Tarik!`).
+   - Holding past the target zone overflows (`Tumpah!`).
+3. **Tap** the ready tray (or **drag** a cup to a customer) to serve.
 
-#### 2. Roti Canai — **RM 4** *(Available from Shift 1)*
-1. Tap **DOUGH** in the dock to place dough on the **Prep Board**.
-2. **Swipe left or right twice** across the Prep Board to stretch it (`Tap to Toss!`).
-3. **Tap** the Prep Board to toss the dough onto an open **Kuali** slot.
-4. Once Side 1 is ready to flip (≥ 45%), **swipe up** on the Kuali slot to flip it (`Flip!`).
-5. When Side 2 finishes cooking (`TAP TO PLATE`), **tap** the Kuali slot to move it to the **Serving Plate**.
-6. **Serve** from the Serving Plate.
+#### 2. Roti Canai — **RM 5+** *(Shift 1+)*
+1. Tap **DOUGH** to place dough on the **Prep Board**.
+2. **Swipe left/right** across the Prep Board to stretch it (`Tap to Toss!`).
+3. **Tap** the Prep Board to toss it onto an open **Kuali** pan.
+4. Once Side 1 is ready (`SWIPE ▲ FLIP`), **swipe up** on the pan to flip it.
+5. When cooked (`TAP TO PLATE`), **tap** the pan to move it to a **Serving Plate**, then serve!
 
-#### 3. Burger Ramly — **RM 8** *(Unlocks in Shift 2)*
-1. **Chop Veg** *(can be stocked ahead of time)*: Tap **VEG** to place veggies on the **Prep Board**, then **swipe down 3 times** to chop — adds **+3** to your sliced veg stock (shown on the `VEG` button).
-2. **Grill Patty**: Tap **PATTY** to drop a patty onto an open **Kuali** slot. When ready (≥ 45%), **swipe up** to flip and cook Side 2 until done.
-3. **Fry Egg**: Tap **EGG** to drop an egg onto the other **Kuali** slot *(no flip required)*.
-4. **Wrap**: **Drag** the cooked **Patty** onto the **Egg** slot to combine them into a **Wrapped Burger** (`Wrapped!`).
-5. **Dress**: Tap **VEG** (uses 1 sliced veg stock) to add garnish (`+Veg`), and tap **SAUCE** to add sauce (`+Sauce`).
-6. **Plate & Serve**: Tap **WRAP** in the dock (or drag the dressed burger onto **WRAP**) to place it on the **Serving Plate**, then serve!
+#### 3. Burger Ramly — **RM 10+** *(Unlocks Shift 2)*
+1. **Chop Veg**: Tap **VEG** to place veggies on the **Prep Board**, then **swipe down** to chop and build sliced veggie stock (`VEG (3)`).
+2. **Grill Patty**: Tap **PATTY** to drop onto a Kuali pan; **swipe up** when ready to flip and finish cooking.
+3. **Fry Egg**: Tap **EGG** on another open pan *(no flip needed)*.
+4. **Wrap**: **Drag** the cooked **Patty** onto the **Egg** pan (`Wrapped!`).
+5. **Dress**: Tap **VEG** (adds garnish) and tap **SAUCE** (adds chili/mayo drizzle).
+6. **Plate**: Tap **WRAP** (or drag the dressed burger onto **WRAP** / the plates) to plate and serve!
 
----
-
-### Serving, Combos & Customers
-
-- **Quick Serve**: Tap a ready dish on the **Serving Plate** or the **Teh Tarik** station to automatically serve the most urgent matching customer.
-- **Targeted Serve**: Drag a ready dish directly onto a customer, or tap the customer while holding a matching dish on the plate / Teh Tarik station.
-- **Layan! Combos & Tips**:
-  - Serving a dish while a customer's patience is **above 50%** increases your combo (up to **x5**) and adds a **+RM (combo - 1)** bonus.
-  - Completing a customer's entire order above 50% patience awards their **tip**.
-  - Serving below 50% patience or letting a customer walk away (`Lama sangat!`) resets your combo to **x1**.
-
-#### Customer Archetypes
-
-| Customer | Look | Base Patience | Order Size | Tip (when served > 50% patience) |
-| --- | --- | --- | --- | --- |
-| **Pak Cik** | Songkok & moustache | 42s | 1–2 items | RM 2 |
-| **Office Rush** | Glasses | 25s | 1–2 items | RM 4 |
-| **Lepak** | Orange cap | 50s | 2–3 items | RM 3 |
-
-*(Patience scales down slightly on higher shifts.)*
+#### 4. Roti Telur — **RM 7+** *(Unlocks Shift 3)*
+1. Cook a **Roti Canai** and move it to a **Serving Plate**.
+2. Fry an **EGG** on the Kuali until `READY`.
+3. **Drag** the cooked Egg onto the plated Roti Canai — or simply **tap** the cooked Egg — to combine them into **Roti Telur**!
 
 ---
 
-### Avoiding Burns & Using Trash
+### Serving, Combos & Tips
 
-- Food left on the **Kuali** too long after finishing will burn (`HANGUS!`).
-- **Clear burnt items** by:
-  - **Double-tapping** the burnt Kuali slot, or
-  - **Tapping** `TRASH` in the dock, or
-  - **Dragging** the burnt item onto `TRASH`.
-- You can also drag unwanted items from the Serving Plate, Teh Tarik station, or Kuali onto `TRASH` to discard them.
-
----
-
-### Tips for High Shifts
-
-- **Pre-chop veggies** during quiet moments so you always have `VEG` stock ready for Burger Ramly orders.
-- **Prioritize Office Rush** customers — they have the shortest patience bar but pay the highest tip (**RM 4**).
-- **Keep both Kuali slots busy**: cook a Patty and Egg in parallel, or grill a Roti while pulling Teh Tarik.
-- Switching tabs or backgrounding the app automatically **pauses** your shift.
+- **Quick Serve**: Tap any plated dish or the Teh Tarik ready tray to automatically fly it to the most urgent matching customer.
+- **Targeted Serve**: Drag a dish onto a specific customer, or tap the customer directly.
+- **Layan! Combos & Fever**: Serving a customer with **> 50% patience** builds your combo up to **x5** (`+RM (combo - 1)` bonus per dish) and awards their tip on order completion. Reaching **x4+** triggers **LAYAN FEVER (2x Tips)**!
+- **Burnt Food (`HANGUS!`)**: Clear burnt pans by **double-tapping** the pan, tapping **TRASH**, or dragging the burnt item to **TRASH**.
 
 ---
 

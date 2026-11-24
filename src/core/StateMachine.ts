@@ -1,5 +1,6 @@
 export type GameState =
   | 'TITLE'
+  | 'SHOP'
   | 'SHIFT_INTRO'
   | 'PLAYING'
   | 'PAUSED'
@@ -14,12 +15,13 @@ export interface StateHandler {
 }
 
 const VALID_TRANSITIONS: Readonly<Record<GameState, readonly GameState[]>> = {
-  TITLE: ['SHIFT_INTRO'],
+  TITLE: ['SHIFT_INTRO', 'SHOP'],
+  SHOP: ['TITLE', 'SHIFT_INTRO'],
   SHIFT_INTRO: ['PLAYING', 'TITLE'],
   PLAYING: ['PAUSED', 'SHIFT_SUMMARY', 'GAME_OVER', 'TITLE'],
   PAUSED: ['PLAYING', 'TITLE'],
-  SHIFT_SUMMARY: ['SHIFT_INTRO', 'GAME_OVER', 'TITLE'],
-  GAME_OVER: ['SHIFT_INTRO', 'TITLE'],
+  SHIFT_SUMMARY: ['SHIFT_INTRO', 'SHOP', 'TITLE'],
+  GAME_OVER: ['SHIFT_INTRO', 'SHOP', 'TITLE'],
 };
 
 export class StateMachine {
