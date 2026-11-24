@@ -1,12 +1,26 @@
+import {
+  createDefaultUpgrades,
+  getCookSpeedMultiplier,
+  getDoughSwipesRequired,
+  getKualiSlotCount,
+  getPlateSlotCount,
+  getTehFillDuration,
+  getTehMaxCups,
+  getTehSweetSpot,
+  getVegSwipesRequired,
+  getVegYield,
+} from '../core/ProgressStore';
 import type {
-  AssemblyPlateState,
   AudioController,
   DishType,
   FloatingPopup,
+  FlyingDish,
   GameSnapshot,
+  KitchenUpgrades,
   KualiSlot,
   Particle,
   PrepBoardState,
+  ServingPlateSlot,
   TehTarikState,
 } from '../types/game';
 import {
@@ -25,39 +39,50 @@ export type DockButtonId =
   | 'WRAPPER'
   | 'TRASH';
 
-export const TEH_TARIK_RECT: Rect = { x: 12, y: 235, w: 103, h: 400 };
-export const KUALI_RECT: Rect = { x: 125, y: 235, w: 150, h: 275 };
-export const KUALI_SLOT_RECTS: readonly [Rect, Rect] = [
-  { x: 125, y: 245, w: 150, h: 120 },
-  { x: 125, y: 380, w: 150, h: 120 },
+// 960 x 540 landscape Cooking Crush counter layout
+export const TEH_TARIK_RECT: Rect = { x: 16, y: 234, w: 164, h: 204 };
+export const TEH_PULL_RECT: Rect = { x: 16, y: 234, w: 164, h: 124 };
+export const TEH_TRAY_RECT: Rect = { x: 16, y: 358, w: 164, h: 80 };
+
+export const KUALI_RECT: Rect = { x: 192, y: 234, w: 344, h: 204 };
+export const KUALI_SLOT_RECTS: readonly [Rect, Rect, Rect, Rect] = [
+  { x: 202, y: 244, w: 158, h: 90 },
+  { x: 368, y: 244, w: 158, h: 90 },
+  { x: 202, y: 342, w: 158, h: 90 },
+  { x: 368, y: 342, w: 158, h: 90 },
 ];
-export const ASSEMBLY_PLATE_RECT: Rect = { x: 125, y: 525, w: 150, h: 110 };
-export const PREP_BOARD_RECT: Rect = { x: 285, y: 235, w: 93, h: 400 };
+
+export const PLATES_RECT: Rect = { x: 548, y: 234, w: 204, h: 204 };
+export const PLATE_SLOT_RECTS: readonly [Rect, Rect, Rect, Rect] = [
+  { x: 556, y: 244, w: 92, h: 90 },
+  { x: 652, y: 244, w: 92, h: 90 },
+  { x: 556, y: 342, w: 92, h: 90 },
+  { x: 652, y: 342, w: 92, h: 90 },
+];
+
+export const PREP_BOARD_RECT: Rect = { x: 764, y: 234, w: 180, h: 204 };
 
 export const DOCK_RECTS: Readonly<Record<DockButtonId, Rect>> = {
-  DOUGH: { x: 12, y: 660, w: 86, h: 76 },
-  PATTY: { x: 106, y: 660, w: 86, h: 76 },
-  EGG: { x: 200, y: 660, w: 86, h: 76 },
-  VEG: { x: 294, y: 660, w: 86, h: 76 },
-  SAUCE: { x: 12, y: 744, w: 115, h: 76 },
-  WRAPPER: { x: 137, y: 744, w: 116, h: 76 },
-  TRASH: { x: 263, y: 744, w: 115, h: 76 },
+  DOUGH: { x: 16, y: 454, w: 124, h: 74 },
+  PATTY: { x: 150, y: 454, w: 124, h: 74 },
+  EGG: { x: 284, y: 454, w: 124, h: 74 },
+  VEG: { x: 418, y: 454, w: 124, h: 74 },
+  SAUCE: { x: 552, y: 454, w: 124, h: 74 },
+  WRAPPER: { x: 686, y: 454, w: 124, h: 74 },
+  TRASH: { x: 820, y: 454, w: 124, h: 74 },
 };
 
-const TEH_FILL_DURATION = 1.8;
-const TEH_READY_MIN = 0.75;
-const TEH_READY_MAX = 0.9;
 const TEH_POUR_SFX_INTERVAL = 0.14;
 
-const ROTI_COOK_DURATION = 3.5;
-const PATTY_COOK_DURATION = 4.0;
+const ROTI_COOK_DURATION = 3.4;
+const PATTY_COOK_DURATION = 3.8;
 const EGG_COOK_DURATION = 2.0;
-const WRAPPED_HOLD_DURATION = 5.0;
-const BURN_DURATION = 2.5;
+const WRAPPED_HOLD_DURATION = 5.5;
+const BURN_DURATION = 2.8;
 
-const SWIPE_HORIZONTAL_THRESHOLD = 35;
-const SWIPE_UP_THRESHOLD = 35;
-const SWIPE_DOWN_THRESHOLD = 30;
+const SWIPE_HORIZONTAL_THRESHOLD = 32;
+const SWIPE_UP_THRESHOLD = 28;
+const SWIPE_DOWN_THRESHOLD = 26;
 const DRAG_START_DISTANCE = 14;
 const DOUBLE_TAP_WINDOW_SECONDS = 0.45;
 
@@ -70,16 +95,17 @@ interface PointerSession {
   x: number;
   y: number;
   source:
-    | 'TEH_TARIK'
+    | 'TEH_PULL'
+    | 'TEH_TRAY'
     | 'PREP'
-    | 'KUALI_0'
-    | 'KUALI_1'
+    | 'KUALI'
     | 'PLATE'
     | 'CUSTOMER'
     | 'DOCK'
     | 'NONE';
+  slotIndex?: number;
   dockId?: DockButtonId;
-  customerSlot?: 0 | 1 | 2;
+  customerSlot?: 0 | 1 | 2 | 3;
   swiped: boolean;
   dragging: boolean;
 }
@@ -88,9 +114,10 @@ function pointInRect(x: number, y: number, r: Rect): boolean {
   return x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
 }
 
-function createEmptyKualiSlot(id: 0 | 1): KualiSlot {
+function createKualiSlot(id: number, unlocked: boolean): KualiSlot {
   return {
     id,
+    unlocked,
     item: null,
     state: 'RAW',
     progress: 0,
@@ -100,10 +127,20 @@ function createEmptyKualiSlot(id: 0 | 1): KualiSlot {
   };
 }
 
+function createPlateSlot(id: number, unlocked: boolean): ServingPlateSlot {
+  return {
+    id,
+    unlocked,
+    dish: null,
+  };
+}
+
 export class Stations implements FeedbackSink {
-  public kuali: [KualiSlot, KualiSlot] = [
-    createEmptyKualiSlot(0),
-    createEmptyKualiSlot(1),
+  public kuali: KualiSlot[] = [
+    createKualiSlot(0, true),
+    createKualiSlot(1, true),
+    createKualiSlot(2, false),
+    createKualiSlot(3, false),
   ];
   public prep: PrepBoardState = {
     item: null,
@@ -114,30 +151,40 @@ export class Stations implements FeedbackSink {
   public tehTarik: TehTarikState = {
     isPulling: false,
     fillLevel: 0,
-    isReady: false,
+    readyCount: 0,
+    maxCups: 1,
     spilledTimer: 0,
+    sweetMin: 0.72,
+    sweetMax: 0.92,
   };
-  public plate: AssemblyPlateState = {
-    dish: null,
-  };
+  public plates: ServingPlateSlot[] = [
+    createPlateSlot(0, true),
+    createPlateSlot(1, true),
+    createPlateSlot(2, false),
+    createPlateSlot(3, false),
+  ];
+  public flyingDishes: FlyingDish[] = [];
   public popups: FloatingPopup[] = [];
   public particles: Particle[] = [];
   public screenShake = 0;
   public activeDrag: {
     source: string;
     dish?: DishType;
+    item?: string;
     x: number;
     y: number;
   } | null = null;
 
   private readonly audio: AudioController;
   private readonly queue: CustomerQueue;
+  private upgrades: KitchenUpgrades = createDefaultUpgrades();
+  private walletRM = 0;
   private pointer: PointerSession | null = null;
   private pourSfxTimer = 0;
   private steamTimer = 0;
   private elapsed = 0;
-  private nextPopupId = 1;
-  private lastBurntTapTime: [number, number] = [-10, -10];
+  private nextId = 1;
+  private lastBurntTapTime: number[] = [-10, -10, -10, -10];
 
   constructor(audio: AudioController, queue?: CustomerQueue) {
     this.audio = audio;
@@ -148,40 +195,64 @@ export class Stations implements FeedbackSink {
     return this.queue;
   }
 
-  public resetForShift(shift: number): void {
-    this.kuali = [createEmptyKualiSlot(0), createEmptyKualiSlot(1)];
+  public setWalletRM(walletRM: number): void {
+    this.walletRM = walletRM;
+  }
+
+  public resetForShift(shift: number, upgrades: KitchenUpgrades, walletRM: number): void {
+    this.upgrades = { ...upgrades };
+    this.walletRM = walletRM;
+
+    const kualiCount = getKualiSlotCount(this.upgrades);
+    this.kuali = [0, 1, 2, 3].map((i) => createKualiSlot(i, i < kualiCount));
+
+    const plateCount = getPlateSlotCount(this.upgrades);
+    this.plates = [0, 1, 2, 3].map((i) => createPlateSlot(i, i < plateCount));
+
+    const sweet = getTehSweetSpot(this.upgrades);
+    this.tehTarik = {
+      isPulling: false,
+      fillLevel: 0,
+      readyCount: 0,
+      maxCups: getTehMaxCups(this.upgrades),
+      spilledTimer: 0,
+      sweetMin: sweet.min,
+      sweetMax: sweet.max,
+    };
+
     this.prep = {
       item: null,
       swipesDone: 0,
       swipesRequired: 0,
       slicedStock: 0,
     };
-    this.tehTarik = {
-      isPulling: false,
-      fillLevel: 0,
-      isReady: false,
-      spilledTimer: 0,
-    };
-    this.plate = { dish: null };
+    this.flyingDishes = [];
     this.popups = [];
     this.particles = [];
     this.screenShake = 0;
     this.activeDrag = null;
     this.pointer = null;
     this.pourSfxTimer = 0;
-    this.lastBurntTapTime = [-10, -10];
-    this.queue.startShift(shift);
+    this.lastBurntTapTime = [-10, -10, -10, -10];
+    this.queue.startShift(shift, this.upgrades);
   }
 
-  public addPopup(x: number, y: number, text: string, color: string): void {
+  public addPopup(
+    x: number,
+    y: number,
+    text: string,
+    color: string,
+    scale = 1
+  ): void {
     this.popups.push({
-      id: `pop_${this.nextPopupId++}`,
+      id: `pop_${this.nextId++}`,
       x,
       y,
       text,
       color,
       alpha: 1,
-      vy: -38,
+      vy: -42,
+      scale,
     });
   }
 
@@ -195,19 +266,26 @@ export class Stations implements FeedbackSink {
     for (let i = 0; i < count; i++) {
       const angle =
         kind === 'STEAM'
-          ? -Math.PI * 0.5 + (Math.random() - 0.5) * 0.8
-          : Math.random() * Math.PI * 2;
+          ? -Math.PI * 0.5 + (Math.random() - 0.5) * 0.75
+          : kind === 'HEART'
+            ? -Math.PI * 0.5 + (Math.random() - 0.5) * 1.4
+            : Math.random() * Math.PI * 2;
       const speed =
         kind === 'STEAM'
-          ? 18 + Math.random() * 24
-          : 35 + Math.random() * 75;
-      const maxLife = kind === 'STEAM' ? 0.75 + Math.random() * 0.35 : 0.45 + Math.random() * 0.3;
+          ? 20 + Math.random() * 24
+          : kind === 'HEART'
+            ? 30 + Math.random() * 48
+            : 40 + Math.random() * 80;
+      const maxLife =
+        kind === 'STEAM'
+          ? 0.75 + Math.random() * 0.35
+          : 0.48 + Math.random() * 0.3;
       this.particles.push({
-        x: x + (Math.random() - 0.5) * 18,
+        x: x + (Math.random() - 0.5) * 20,
         y: y + (Math.random() - 0.5) * 14,
         vx: Math.cos(angle) * speed,
         vy: Math.sin(angle) * speed,
-        size: kind === 'STEAM' ? 5 + Math.random() * 5 : 3 + Math.random() * 4,
+        size: kind === 'STEAM' ? 6 + Math.random() * 5 : 4 + Math.random() * 4,
         color,
         alpha: 1,
         life: 0,
@@ -224,7 +302,6 @@ export class Stations implements FeedbackSink {
   public update(dt: number): void {
     this.elapsed += dt;
     this.queue.update(dt);
-
     this.updateTehTarik(dt);
     this.updateKuali(dt);
     this.updateEffects(dt);
@@ -234,7 +311,7 @@ export class Stations implements FeedbackSink {
     if (this.pointer !== null) return;
     this.audio.unlock();
 
-    // Check Customer Rail
+    // Customer Rail
     const customerSlot = this.queue.getSlotAtPoint(x, y);
     if (customerSlot !== null) {
       this.pointer = {
@@ -253,8 +330,8 @@ export class Stations implements FeedbackSink {
       return;
     }
 
-    // Check Teh Tarik Dispenser
-    if (pointInRect(x, y, TEH_TARIK_RECT)) {
+    // Teh Tarik Ready Tray (lower half)
+    if (pointInRect(x, y, TEH_TRAY_RECT)) {
       this.pointer = {
         pointerId,
         startX: x,
@@ -263,23 +340,41 @@ export class Stations implements FeedbackSink {
         anchorY: y,
         x,
         y,
-        source: 'TEH_TARIK',
+        source: 'TEH_TRAY',
         swiped: false,
         dragging: false,
       };
-
-      if (!this.tehTarik.isReady && this.tehTarik.spilledTimer <= 0) {
-        this.tehTarik.isPulling = true;
-        this.pourSfxTimer = 0;
-        this.audio.playPour(this.tehTarik.fillLevel);
+      // If tray is empty, holding anywhere on Teh Tarik station still pulls!
+      if (this.tehTarik.readyCount === 0 && this.tehTarik.spilledTimer <= 0) {
+        this.pointer.source = 'TEH_PULL';
+        this.startTehPull();
       }
       return;
     }
 
-    // Check Kuali Slots
-    for (let i = 0; i < 2; i++) {
-      const slotIndex = i as 0 | 1;
-      if (pointInRect(x, y, KUALI_SLOT_RECTS[slotIndex])) {
+    // Teh Tarik Pull Urn (upper half)
+    if (pointInRect(x, y, TEH_PULL_RECT)) {
+      this.pointer = {
+        pointerId,
+        startX: x,
+        startY: y,
+        anchorX: x,
+        anchorY: y,
+        x,
+        y,
+        source: 'TEH_PULL',
+        swiped: false,
+        dragging: false,
+      };
+      if (this.tehTarik.readyCount < this.tehTarik.maxCups && this.tehTarik.spilledTimer <= 0) {
+        this.startTehPull();
+      }
+      return;
+    }
+
+    // Kuali Slots
+    for (let i = 0; i < KUALI_SLOT_RECTS.length; i++) {
+      if (pointInRect(x, y, KUALI_SLOT_RECTS[i]!)) {
         this.pointer = {
           pointerId,
           startX: x,
@@ -288,7 +383,8 @@ export class Stations implements FeedbackSink {
           anchorY: y,
           x,
           y,
-          source: slotIndex === 0 ? 'KUALI_0' : 'KUALI_1',
+          source: 'KUALI',
+          slotIndex: i,
           swiped: false,
           dragging: false,
         };
@@ -296,24 +392,27 @@ export class Stations implements FeedbackSink {
       }
     }
 
-    // Check Assembly Plate
-    if (pointInRect(x, y, ASSEMBLY_PLATE_RECT)) {
-      this.pointer = {
-        pointerId,
-        startX: x,
-        startY: y,
-        anchorX: x,
-        anchorY: y,
-        x,
-        y,
-        source: 'PLATE',
-        swiped: false,
-        dragging: false,
-      };
-      return;
+    // Serving Plates
+    for (let i = 0; i < PLATE_SLOT_RECTS.length; i++) {
+      if (pointInRect(x, y, PLATE_SLOT_RECTS[i]!)) {
+        this.pointer = {
+          pointerId,
+          startX: x,
+          startY: y,
+          anchorX: x,
+          anchorY: y,
+          x,
+          y,
+          source: 'PLATE',
+          slotIndex: i,
+          swiped: false,
+          dragging: false,
+        };
+        return;
+      }
     }
 
-    // Check Prep Board
+    // Prep Board
     if (pointInRect(x, y, PREP_BOARD_RECT)) {
       this.pointer = {
         pointerId,
@@ -330,7 +429,7 @@ export class Stations implements FeedbackSink {
       return;
     }
 
-    // Check Bottom Dock Buttons
+    // Bottom Dock
     const dockId = this.getDockAtPoint(x, y);
     if (dockId !== null) {
       this.pointer = {
@@ -387,15 +486,15 @@ export class Stations implements FeedbackSink {
         this.audio.playFlip();
         this.spawnParticles(
           PREP_BOARD_RECT.x + PREP_BOARD_RECT.w * 0.5,
-          PREP_BOARD_RECT.y + 180,
-          5,
+          PREP_BOARD_RECT.y + 100,
+          6,
           '#FEF3C7',
           'SPARK'
         );
         if (this.prep.swipesDone >= this.prep.swipesRequired) {
           this.addPopup(
             PREP_BOARD_RECT.x + PREP_BOARD_RECT.w * 0.5,
-            PREP_BOARD_RECT.y + 150,
+            PREP_BOARD_RECT.y + 72,
             'Tap to Toss!',
             '#F59E0B'
           );
@@ -413,20 +512,21 @@ export class Stations implements FeedbackSink {
         this.audio.playChop();
         this.spawnParticles(
           PREP_BOARD_RECT.x + PREP_BOARD_RECT.w * 0.5,
-          PREP_BOARD_RECT.y + 180,
-          6,
+          PREP_BOARD_RECT.y + 105,
+          7,
           '#4ADE80',
           'SPARK'
         );
         if (this.prep.swipesDone >= this.prep.swipesRequired) {
-          this.prep.slicedStock += 3;
+          const yieldAmt = getVegYield(this.upgrades);
+          this.prep.slicedStock += yieldAmt;
           this.prep.item = null;
           this.prep.swipesDone = 0;
           this.prep.swipesRequired = 0;
           this.addPopup(
             PREP_BOARD_RECT.x + PREP_BOARD_RECT.w * 0.5,
-            PREP_BOARD_RECT.y + 145,
-            '+3 Veg',
+            PREP_BOARD_RECT.y + 72,
+            `+${yieldAmt} Veg`,
             '#4ADE80'
           );
         }
@@ -434,16 +534,18 @@ export class Stations implements FeedbackSink {
       return;
     }
 
-    // Kuali slot swipe-up to flip OR drag cooked patty / wrapped burger / burnt item
-    if (this.pointer.source === 'KUALI_0' || this.pointer.source === 'KUALI_1') {
-      const slotIndex: 0 | 1 = this.pointer.source === 'KUALI_0' ? 0 : 1;
+    // Kuali swipe-up to flip OR drag cooked patty / egg / wrapped burger / burnt item
+    if (this.pointer.source === 'KUALI' && this.pointer.slotIndex !== undefined) {
+      const slotIndex = this.pointer.slotIndex;
       const slot = this.kuali[slotIndex];
+      if (!slot || !slot.unlocked) return;
 
       if (
         !this.pointer.swiped &&
         !this.pointer.dragging &&
         (slot.item === 'ROTI' || slot.item === 'PATTY') &&
-        (slot.state === 'READY_FLIP' || (slot.state === 'COOKING_SIDE1' && slot.progress >= 0.45)) &&
+        (slot.state === 'READY_FLIP' ||
+          (slot.state === 'COOKING_SIDE1' && slot.progress >= 0.45)) &&
         dyFromAnchor < -SWIPE_UP_THRESHOLD &&
         Math.abs(dyFromAnchor) > Math.abs(dxFromAnchor)
       ) {
@@ -456,13 +558,15 @@ export class Stations implements FeedbackSink {
         const canDrag =
           slot.state === 'BURNT' ||
           (slot.item === 'PATTY' && slot.state === 'COOKED') ||
+          (slot.item === 'EGG' && slot.state === 'COOKED') ||
           slot.item === 'WRAPPED_BURGER';
 
         if (canDrag) {
           this.pointer.dragging = true;
           this.activeDrag = {
-            source: this.pointer.source,
+            source: `KUALI_${slotIndex}`,
             dish: slot.item === 'WRAPPED_BURGER' ? 'BURGER_RAMLY' : undefined,
+            item: slot.item,
             x,
             y,
           };
@@ -474,13 +578,16 @@ export class Stations implements FeedbackSink {
       return;
     }
 
-    // Assembly Plate drag
-    if (this.pointer.source === 'PLATE' && this.plate.dish !== null) {
+    // Serving Plate drag
+    if (this.pointer.source === 'PLATE' && this.pointer.slotIndex !== undefined) {
+      const plate = this.plates[this.pointer.slotIndex];
+      if (!plate || !plate.unlocked || plate.dish === null) return;
+
       if (!this.pointer.dragging && distFromStart >= DRAG_START_DISTANCE) {
         this.pointer.dragging = true;
         this.activeDrag = {
-          source: 'PLATE',
-          dish: this.plate.dish,
+          source: `PLATE_${plate.id}`,
+          dish: plate.dish,
           x,
           y,
         };
@@ -491,12 +598,12 @@ export class Stations implements FeedbackSink {
       return;
     }
 
-    // Ready Teh Tarik drag
-    if (this.pointer.source === 'TEH_TARIK' && this.tehTarik.isReady) {
+    // Teh Tarik Ready Tray drag
+    if (this.pointer.source === 'TEH_TRAY' && this.tehTarik.readyCount > 0) {
       if (!this.pointer.dragging && distFromStart >= DRAG_START_DISTANCE) {
         this.pointer.dragging = true;
         this.activeDrag = {
-          source: 'TEH_TARIK',
+          source: 'TEH_TRAY',
           dish: 'TEH_TARIK',
           x,
           y,
@@ -515,22 +622,28 @@ export class Stations implements FeedbackSink {
     this.pointer = null;
 
     // Finalize Teh Tarik pull release
-    if (session.source === 'TEH_TARIK' && this.tehTarik.isPulling) {
+    if (session.source === 'TEH_PULL' && this.tehTarik.isPulling) {
       this.tehTarik.isPulling = false;
-      if (this.tehTarik.fillLevel > TEH_READY_MAX) {
+      if (this.tehTarik.fillLevel > this.tehTarik.sweetMax) {
         this.triggerTehSpill();
-      } else if (this.tehTarik.fillLevel >= TEH_READY_MIN) {
-        this.tehTarik.isReady = true;
+      } else if (this.tehTarik.fillLevel >= this.tehTarik.sweetMin) {
+        this.tehTarik.readyCount = Math.min(
+          this.tehTarik.maxCups,
+          this.tehTarik.readyCount + 1
+        );
+        this.tehTarik.fillLevel = 0;
+        this.audio.playFlip();
         this.addPopup(
-          TEH_TARIK_RECT.x + TEH_TARIK_RECT.w * 0.5,
-          TEH_TARIK_RECT.y + 150,
+          TEH_PULL_RECT.x + TEH_PULL_RECT.w * 0.5,
+          TEH_PULL_RECT.y + 44,
           'Tarik!',
-          '#F59E0B'
+          '#F59E0B',
+          1.1
         );
         this.spawnParticles(
-          TEH_TARIK_RECT.x + TEH_TARIK_RECT.w * 0.5,
-          TEH_TARIK_RECT.y + 190,
-          8,
+          TEH_PULL_RECT.x + TEH_PULL_RECT.w * 0.5,
+          TEH_PULL_RECT.y + 72,
+          9,
           '#FDE047',
           'SPARK'
         );
@@ -543,26 +656,24 @@ export class Stations implements FeedbackSink {
 
     // Handle active drag drop
     if (session.dragging && this.activeDrag !== null) {
-      this.handleDragDrop(session.source, x, y);
+      this.handleDragDrop(session, x, y);
       this.activeDrag = null;
       return;
     }
 
     this.activeDrag = null;
-
-    if (session.swiped) {
-      return;
-    }
+    if (session.swiped) return;
 
     // Tap interactions
     switch (session.source) {
-      case 'TEH_TARIK':
-        if (this.tehTarik.isReady) {
-          const res = this.queue.serveDish('TEH_TARIK');
-          if (res.served) {
-            this.tehTarik.isReady = false;
-            this.tehTarik.fillLevel = 0;
-          }
+      case 'TEH_TRAY':
+        this.tryServeTehTarik();
+        break;
+
+      case 'TEH_PULL':
+        // If cups are full and user taps urn, serve a cup for convenience
+        if (this.tehTarik.readyCount >= this.tehTarik.maxCups) {
+          this.tryServeTehTarik();
         }
         break;
 
@@ -570,20 +681,15 @@ export class Stations implements FeedbackSink {
         this.handlePrepTap();
         break;
 
-      case 'KUALI_0':
-        this.handleKualiTap(0);
-        break;
-
-      case 'KUALI_1':
-        this.handleKualiTap(1);
+      case 'KUALI':
+        if (session.slotIndex !== undefined) {
+          this.handleKualiTap(session.slotIndex);
+        }
         break;
 
       case 'PLATE':
-        if (this.plate.dish !== null) {
-          const res = this.queue.serveDish(this.plate.dish);
-          if (res.served) {
-            this.plate.dish = null;
-          }
+        if (session.slotIndex !== undefined) {
+          this.handlePlateTap(session.slotIndex);
         }
         break;
 
@@ -618,26 +724,34 @@ export class Stations implements FeedbackSink {
     return {
       shift: this.queue.shift,
       cashRM: this.queue.cashRM,
+      walletRM: this.walletRM,
       targetRM: this.queue.targetRM,
       shiftTimeLeft: this.queue.shiftTimeLeft,
       combo: this.queue.combo,
-      kuali: [
-        { ...this.kuali[0] },
-        { ...this.kuali[1] },
-      ],
+      isFever: this.queue.isFever(),
+      kuali: this.kuali.map((k) => ({ ...k })),
       prep: { ...this.prep },
       tehTarik: { ...this.tehTarik },
-      plate: { ...this.plate },
+      plates: this.plates.map((p) => ({ ...p })),
       customers: this.queue.customers.map((c) => ({
         ...c,
         items: [...c.items],
         fulfilled: [...c.fulfilled],
       })),
+      flyingDishes: this.flyingDishes,
       popups: this.popups,
       particles: this.particles,
       screenShake: this.screenShake,
       activeDrag: this.activeDrag ? { ...this.activeDrag } : null,
+      upgrades: { ...this.upgrades },
+      starsEarned: this.queue.getStarsEarned(),
     };
+  }
+
+  private startTehPull(): void {
+    this.tehTarik.isPulling = true;
+    this.pourSfxTimer = 0;
+    this.audio.playPour(this.tehTarik.fillLevel);
   }
 
   private updateTehTarik(dt: number): void {
@@ -646,14 +760,15 @@ export class Stations implements FeedbackSink {
     }
 
     if (this.tehTarik.isPulling) {
-      this.tehTarik.fillLevel += dt / TEH_FILL_DURATION;
+      const duration = getTehFillDuration(this.upgrades);
+      this.tehTarik.fillLevel += dt / duration;
       this.pourSfxTimer += dt;
       if (this.pourSfxTimer >= TEH_POUR_SFX_INTERVAL) {
         this.pourSfxTimer = 0;
         this.audio.playPour(Math.min(1, this.tehTarik.fillLevel));
       }
 
-      if (this.tehTarik.fillLevel > TEH_READY_MAX) {
+      if (this.tehTarik.fillLevel > this.tehTarik.sweetMax) {
         this.triggerTehSpill();
       }
     }
@@ -662,19 +777,18 @@ export class Stations implements FeedbackSink {
   private triggerTehSpill(): void {
     this.tehTarik.isPulling = false;
     this.tehTarik.fillLevel = 0;
-    this.tehTarik.isReady = false;
-    this.tehTarik.spilledTimer = 1.0;
+    this.tehTarik.spilledTimer = 0.9;
     this.audio.playSpill();
     this.triggerShake(0.22);
     this.addPopup(
-      TEH_TARIK_RECT.x + TEH_TARIK_RECT.w * 0.5,
-      TEH_TARIK_RECT.y + 160,
+      TEH_PULL_RECT.x + TEH_PULL_RECT.w * 0.5,
+      TEH_PULL_RECT.y + 52,
       'Tumpah!',
       '#EF4444'
     );
     this.spawnParticles(
-      TEH_TARIK_RECT.x + TEH_TARIK_RECT.w * 0.5,
-      TEH_TARIK_RECT.y + 220,
+      TEH_PULL_RECT.x + TEH_PULL_RECT.w * 0.5,
+      TEH_PULL_RECT.y + 82,
       10,
       '#D97706',
       'SPARK'
@@ -683,28 +797,29 @@ export class Stations implements FeedbackSink {
 
   private updateKuali(dt: number): void {
     this.steamTimer += dt;
-    const emitSteam = this.steamTimer >= 0.35;
+    const emitSteam = this.steamTimer >= 0.3;
     if (emitSteam) {
       this.steamTimer = 0;
     }
 
-    for (let i = 0; i < 2; i++) {
-      const slotIndex = i as 0 | 1;
-      const slot = this.kuali[slotIndex];
-      if (slot.item === null || slot.state === 'BURNT') continue;
+    const speedMult = getCookSpeedMultiplier(this.upgrades);
+
+    for (let i = 0; i < this.kuali.length; i++) {
+      const slot = this.kuali[i]!;
+      if (!slot.unlocked || slot.item === null || slot.state === 'BURNT') continue;
 
       if (emitSteam) {
-        const r = KUALI_SLOT_RECTS[slotIndex];
+        const r = KUALI_SLOT_RECTS[i]!;
         this.spawnParticles(
           r.x + r.w * 0.5,
-          r.y + r.h * 0.4,
+          r.y + r.h * 0.35,
           1,
-          slot.burnProgress > 0.2 ? '#71717A' : '#E7E5E4',
+          slot.burnProgress > 0.2 ? '#71717A' : '#FFF7ED',
           'STEAM'
         );
       }
 
-      const duration = this.getCookDuration(slot.item);
+      const duration = this.getCookDuration(slot.item) / speedMult;
       if (slot.progress < 1) {
         slot.progress = Math.min(1, slot.progress + dt / duration);
       } else {
@@ -728,8 +843,8 @@ export class Stations implements FeedbackSink {
         slot.burnProgress = 1;
         this.audio.playBurn();
         this.triggerShake(0.25);
-        const r = KUALI_SLOT_RECTS[slotIndex];
-        this.addPopup(r.x + r.w * 0.5, r.y + 42, 'HANGUS!', '#EF4444');
+        const r = KUALI_SLOT_RECTS[i]!;
+        this.addPopup(r.x + r.w * 0.5, r.y + 34, 'HANGUS!', '#EF4444', 1.1);
         this.spawnParticles(r.x + r.w * 0.5, r.y + r.h * 0.5, 10, '#3F3F46', 'STEAM');
       }
     }
@@ -737,13 +852,21 @@ export class Stations implements FeedbackSink {
 
   private updateEffects(dt: number): void {
     if (this.screenShake > 0) {
-      this.screenShake = Math.max(0, this.screenShake - dt * 1.4);
+      this.screenShake = Math.max(0, this.screenShake - dt * 1.6);
+    }
+
+    for (let i = this.flyingDishes.length - 1; i >= 0; i--) {
+      const f = this.flyingDishes[i]!;
+      f.progress += dt * 4.2;
+      if (f.progress >= 1) {
+        this.flyingDishes.splice(i, 1);
+      }
     }
 
     for (let i = this.popups.length - 1; i >= 0; i--) {
       const p = this.popups[i]!;
       p.y += p.vy * dt;
-      p.alpha -= dt * 1.1;
+      p.alpha -= dt * 1.05;
       if (p.alpha <= 0) {
         this.popups.splice(i, 1);
       }
@@ -761,6 +884,24 @@ export class Stations implements FeedbackSink {
     }
   }
 
+  private launchFlyingDish(
+    dish: DishType,
+    startX: number,
+    startY: number,
+    customerSlot: 0 | 1 | 2 | 3
+  ): void {
+    const cr = CUSTOMER_SLOT_RECTS[customerSlot];
+    this.flyingDishes.push({
+      id: `fly_${this.nextId++}`,
+      dish,
+      startX,
+      startY,
+      targetX: cr.x + cr.w * 0.5,
+      targetY: cr.y + cr.h * 0.52,
+      progress: 0,
+    });
+  }
+
   private getCookDuration(item: NonNullable<KualiSlot['item']>): number {
     switch (item) {
       case 'ROTI':
@@ -774,21 +915,30 @@ export class Stations implements FeedbackSink {
     }
   }
 
-  private findOpenKualiSlot(): (0 | 1) | null {
-    if (this.kuali[0].item === null) return 0;
-    if (this.kuali[1].item === null) return 1;
+  private findOpenKualiSlot(): number | null {
+    for (const slot of this.kuali) {
+      if (slot.unlocked && slot.item === null) return slot.id;
+    }
     return null;
   }
 
-  private flipKualiSlot(slotIndex: 0 | 1): void {
+  private findOpenPlateSlot(): number | null {
+    for (const plate of this.plates) {
+      if (plate.unlocked && plate.dish === null) return plate.id;
+    }
+    return null;
+  }
+
+  private flipKualiSlot(slotIndex: number): void {
     const slot = this.kuali[slotIndex];
+    if (!slot) return;
     slot.state = 'COOKING_SIDE2';
     slot.progress = Math.max(slot.progress, 0.5);
     slot.burnProgress = 0;
     this.audio.playFlip();
-    const r = KUALI_SLOT_RECTS[slotIndex];
-    this.addPopup(r.x + r.w * 0.5, r.y + 36, 'Flip!', '#F59E0B');
-    this.spawnParticles(r.x + r.w * 0.5, r.y + r.h * 0.5, 7, '#FDE047', 'SPARK');
+    const r = KUALI_SLOT_RECTS[slotIndex]!;
+    this.addPopup(r.x + r.w * 0.5, r.y + 28, 'Flip!', '#F59E0B');
+    this.spawnParticles(r.x + r.w * 0.5, r.y + r.h * 0.5, 8, '#FDE047', 'SPARK');
   }
 
   private handlePrepTap(): void {
@@ -797,13 +947,13 @@ export class Stations implements FeedbackSink {
       if (openSlot === null) {
         this.addPopup(
           PREP_BOARD_RECT.x + PREP_BOARD_RECT.w * 0.5,
-          PREP_BOARD_RECT.y + 150,
+          PREP_BOARD_RECT.y + 80,
           'Kuali Full!',
           '#F87171'
         );
         return;
       }
-      const slot = this.kuali[openSlot];
+      const slot = this.kuali[openSlot]!;
       slot.item = 'ROTI';
       slot.state = 'COOKING_SIDE1';
       slot.progress = 0;
@@ -817,76 +967,117 @@ export class Stations implements FeedbackSink {
     }
   }
 
-  private handleKualiTap(slotIndex: 0 | 1): void {
+  private handleKualiTap(slotIndex: number): void {
     const slot = this.kuali[slotIndex];
-    if (slot.item === null) return;
+    if (!slot || !slot.unlocked || slot.item === null) return;
 
-    // Double-tap burnt item to trash it
+    // Double-tap burnt item to clear it
     if (slot.state === 'BURNT') {
-      const prev = this.lastBurntTapTime[slotIndex];
+      const prev = this.lastBurntTapTime[slotIndex] ?? -10;
       if (this.elapsed - prev <= DOUBLE_TAP_WINDOW_SECONDS) {
         this.clearKualiSlot(slotIndex);
         this.lastBurntTapTime[slotIndex] = -10;
-        const r = KUALI_SLOT_RECTS[slotIndex];
-        this.addPopup(r.x + r.w * 0.5, r.y + 44, 'Cleared', '#A1A1AA');
+        const r = KUALI_SLOT_RECTS[slotIndex]!;
+        this.addPopup(r.x + r.w * 0.5, r.y + 34, 'Cleared', '#A1A1AA');
       } else {
         this.lastBurntTapTime[slotIndex] = this.elapsed;
       }
       return;
     }
 
-    // Tap cooked Roti Canai (>= 0.85) to plate
+    // Tap cooked Roti Canai to move to an open Serving Plate
     if (slot.item === 'ROTI' && slot.state === 'COOKED' && slot.progress >= 0.85) {
-      if (this.plate.dish !== null) {
+      const openPlate = this.findOpenPlateSlot();
+      if (openPlate === null) {
         this.addPopup(
-          ASSEMBLY_PLATE_RECT.x + ASSEMBLY_PLATE_RECT.w * 0.5,
-          ASSEMBLY_PLATE_RECT.y + 30,
-          'Plate Full!',
+          PLATES_RECT.x + PLATES_RECT.w * 0.5,
+          PLATES_RECT.y + 30,
+          'Plates Full!',
           '#F87171'
         );
         return;
       }
-      this.plate.dish = 'ROTI_CANAI';
+      this.plates[openPlate]!.dish = 'ROTI_CANAI';
       this.clearKualiSlot(slotIndex);
       this.audio.playFlip();
-      this.spawnParticles(
-        ASSEMBLY_PLATE_RECT.x + ASSEMBLY_PLATE_RECT.w * 0.5,
-        ASSEMBLY_PLATE_RECT.y + ASSEMBLY_PLATE_RECT.h * 0.5,
-        6,
-        '#FDE047',
-        'SPARK'
-      );
+      const pr = PLATE_SLOT_RECTS[openPlate]!;
+      this.spawnParticles(pr.x + pr.w * 0.5, pr.y + pr.h * 0.5, 7, '#FDE047', 'SPARK');
+      return;
+    }
+
+    // Tap cooked Egg -> if a plated ROTI_CANAI is waiting, upgrade it to ROTI_TELUR!
+    if (slot.item === 'EGG' && slot.state === 'COOKED') {
+      const rotiPlate = this.plates.find((p) => p.unlocked && p.dish === 'ROTI_CANAI');
+      if (rotiPlate) {
+        rotiPlate.dish = 'ROTI_TELUR';
+        this.clearKualiSlot(slotIndex);
+        this.audio.playFlip();
+        const pr = PLATE_SLOT_RECTS[rotiPlate.id]!;
+        this.addPopup(pr.x + pr.w * 0.5, pr.y + 22, 'Roti Telur!', '#FACC15');
+        this.spawnParticles(pr.x + pr.w * 0.5, pr.y + pr.h * 0.5, 9, '#FDE047', 'SPARK');
+      }
     }
   }
 
-  private handleCustomerTap(slotIndex: 0 | 1 | 2): void {
-    if (this.plate.dish !== null) {
-      const res = this.queue.serveDish(this.plate.dish, slotIndex);
-      if (res.served) {
-        this.plate.dish = null;
-        return;
+  private handlePlateTap(plateIndex: number): void {
+    const plate = this.plates[plateIndex];
+    if (!plate || !plate.unlocked || plate.dish === null) return;
+    const dish = plate.dish;
+    const res = this.queue.serveDish(dish);
+    if (res.served && res.slotIndex !== undefined) {
+      const pr = PLATE_SLOT_RECTS[plateIndex]!;
+      this.launchFlyingDish(dish, pr.x + pr.w * 0.5, pr.y + pr.h * 0.5, res.slotIndex);
+      plate.dish = null;
+    }
+  }
+
+  private tryServeTehTarik(targetCustomerSlot?: 0 | 1 | 2 | 3): boolean {
+    if (this.tehTarik.readyCount <= 0) return false;
+    const res = this.queue.serveDish('TEH_TARIK', targetCustomerSlot);
+    if (res.served && res.slotIndex !== undefined) {
+      this.tehTarik.readyCount -= 1;
+      this.launchFlyingDish(
+        'TEH_TARIK',
+        TEH_TRAY_RECT.x + TEH_TRAY_RECT.w * 0.5,
+        TEH_TRAY_RECT.y + TEH_TRAY_RECT.h * 0.5,
+        res.slotIndex
+      );
+      return true;
+    }
+    return false;
+  }
+
+  private handleCustomerTap(slotIndex: 0 | 1 | 2 | 3): void {
+    // Try any matching plated dish first
+    for (const plate of this.plates) {
+      if (plate.unlocked && plate.dish !== null) {
+        const dish = plate.dish;
+        const res = this.queue.serveDish(dish, slotIndex);
+        if (res.served) {
+          const pr = PLATE_SLOT_RECTS[plate.id]!;
+          this.launchFlyingDish(dish, pr.x + pr.w * 0.5, pr.y + pr.h * 0.5, slotIndex);
+          plate.dish = null;
+          return;
+        }
       }
     }
-    if (this.tehTarik.isReady) {
-      const res = this.queue.serveDish('TEH_TARIK', slotIndex);
-      if (res.served) {
-        this.tehTarik.isReady = false;
-        this.tehTarik.fillLevel = 0;
-      }
+    // Otherwise try Teh Tarik
+    if (this.tehTarik.readyCount > 0) {
+      this.tryServeTehTarik(slotIndex);
     }
   }
 
   private handleDockTap(dockId: DockButtonId): void {
     const r = DOCK_RECTS[dockId];
     const cx = r.x + r.w * 0.5;
-    const cy = r.y + 12;
+    const cy = r.y + 8;
 
     switch (dockId) {
       case 'DOUGH': {
         if (this.prep.item === null) {
           this.prep.item = 'DOUGH';
           this.prep.swipesDone = 0;
-          this.prep.swipesRequired = 2;
+          this.prep.swipesRequired = getDoughSwipesRequired(this.upgrades);
           this.audio.playFlip();
         }
         break;
@@ -898,14 +1089,14 @@ export class Stations implements FeedbackSink {
           burgerSlot.hasGarnish = true;
           this.prep.slicedStock -= 1;
           this.audio.playChop();
-          const kr = KUALI_SLOT_RECTS[burgerSlot.id];
-          this.addPopup(kr.x + kr.w * 0.5, kr.y + 34, '+Veg', '#4ADE80');
+          const kr = KUALI_SLOT_RECTS[burgerSlot.id]!;
+          this.addPopup(kr.x + kr.w * 0.5, kr.y + 26, '+Veg', '#4ADE80');
           return;
         }
         if (this.prep.item === null) {
           this.prep.item = 'VEG';
           this.prep.swipesDone = 0;
-          this.prep.swipesRequired = 3;
+          this.prep.swipesRequired = getVegSwipesRequired(this.upgrades);
           this.audio.playChop();
         }
         break;
@@ -917,7 +1108,7 @@ export class Stations implements FeedbackSink {
           this.addPopup(cx, cy, 'Kuali Full!', '#F87171');
           return;
         }
-        const slot = this.kuali[openSlot];
+        const slot = this.kuali[openSlot]!;
         slot.item = 'PATTY';
         slot.state = 'COOKING_SIDE1';
         slot.progress = 0;
@@ -934,7 +1125,7 @@ export class Stations implements FeedbackSink {
           this.addPopup(cx, cy, 'Kuali Full!', '#F87171');
           return;
         }
-        const slot = this.kuali[openSlot];
+        const slot = this.kuali[openSlot]!;
         slot.item = 'EGG';
         slot.state = 'COOKING_SIDE1';
         slot.progress = 0;
@@ -950,8 +1141,8 @@ export class Stations implements FeedbackSink {
         if (burgerSlot !== null) {
           burgerSlot.hasSauce = true;
           this.audio.playFlip();
-          const kr = KUALI_SLOT_RECTS[burgerSlot.id];
-          this.addPopup(kr.x + kr.w * 0.5, kr.y + 34, '+Sauce', '#FB923C');
+          const kr = KUALI_SLOT_RECTS[burgerSlot.id]!;
+          this.addPopup(kr.x + kr.w * 0.5, kr.y + 26, '+Sauce', '#FB923C');
         }
         break;
       }
@@ -965,11 +1156,9 @@ export class Stations implements FeedbackSink {
       }
 
       case 'TRASH': {
-        // Quick tap on trash clears any burnt kuali slot
-        for (let i = 0; i < 2; i++) {
-          const slotIndex = i as 0 | 1;
-          if (this.kuali[slotIndex].state === 'BURNT') {
-            this.clearKualiSlot(slotIndex);
+        for (const slot of this.kuali) {
+          if (slot.unlocked && slot.state === 'BURNT') {
+            this.clearKualiSlot(slot.id);
             this.addPopup(cx, cy, 'Cleared', '#A1A1AA');
             return;
           }
@@ -979,136 +1168,168 @@ export class Stations implements FeedbackSink {
     }
   }
 
-  private handleDragDrop(
-    source: PointerSession['source'],
-    x: number,
-    y: number
-  ): void {
+  private handleDragDrop(session: PointerSession, x: number, y: number): void {
     const overTrash = pointInRect(x, y, DOCK_RECTS.TRASH);
     const overWrapper = pointInRect(x, y, DOCK_RECTS.WRAPPER);
     const customerSlot = this.queue.getSlotAtPoint(x, y);
 
-    if (source === 'PLATE' && this.plate.dish !== null) {
+    if (session.source === 'PLATE' && session.slotIndex !== undefined) {
+      const plate = this.plates[session.slotIndex];
+      if (!plate || plate.dish === null) return;
       if (overTrash) {
-        this.plate.dish = null;
+        plate.dish = null;
         this.addPopup(
           DOCK_RECTS.TRASH.x + DOCK_RECTS.TRASH.w * 0.5,
-          DOCK_RECTS.TRASH.y + 12,
+          DOCK_RECTS.TRASH.y + 10,
           'Trashed',
           '#A1A1AA'
         );
         return;
       }
       if (customerSlot !== null) {
-        const res = this.queue.serveDish(this.plate.dish, customerSlot);
+        const dish = plate.dish;
+        const res = this.queue.serveDish(dish, customerSlot);
         if (res.served) {
-          this.plate.dish = null;
+          this.launchFlyingDish(dish, x, y, customerSlot);
+          plate.dish = null;
         }
       }
       return;
     }
 
-    if (source === 'TEH_TARIK' && this.tehTarik.isReady) {
+    if (session.source === 'TEH_TRAY' && this.tehTarik.readyCount > 0) {
       if (overTrash) {
-        this.tehTarik.isReady = false;
-        this.tehTarik.fillLevel = 0;
+        this.tehTarik.readyCount -= 1;
+        this.addPopup(
+          DOCK_RECTS.TRASH.x + DOCK_RECTS.TRASH.w * 0.5,
+          DOCK_RECTS.TRASH.y + 10,
+          'Trashed',
+          '#A1A1AA'
+        );
         return;
       }
       if (customerSlot !== null) {
         const res = this.queue.serveDish('TEH_TARIK', customerSlot);
         if (res.served) {
-          this.tehTarik.isReady = false;
-          this.tehTarik.fillLevel = 0;
+          this.tehTarik.readyCount -= 1;
+          this.launchFlyingDish('TEH_TARIK', x, y, customerSlot);
         }
       }
       return;
     }
 
-    if (source === 'KUALI_0' || source === 'KUALI_1') {
-      const fromIndex: 0 | 1 = source === 'KUALI_0' ? 0 : 1;
-      const toIndex: 0 | 1 = fromIndex === 0 ? 1 : 0;
+    if (session.source === 'KUALI' && session.slotIndex !== undefined) {
+      const fromIndex = session.slotIndex;
       const fromSlot = this.kuali[fromIndex];
-      const toSlot = this.kuali[toIndex];
+      if (!fromSlot || fromSlot.item === null) return;
 
-      if (overTrash && fromSlot.item !== null) {
+      if (overTrash) {
         this.clearKualiSlot(fromIndex);
         this.addPopup(
           DOCK_RECTS.TRASH.x + DOCK_RECTS.TRASH.w * 0.5,
-          DOCK_RECTS.TRASH.y + 12,
+          DOCK_RECTS.TRASH.y + 10,
           'Trashed',
           '#A1A1AA'
         );
         return;
       }
 
-      // Drag cooked patty onto egg slot -> WRAPPED_BURGER
-      if (
-        fromSlot.item === 'PATTY' &&
-        fromSlot.state === 'COOKED' &&
-        toSlot.item === 'EGG' &&
-        toSlot.state !== 'BURNT' &&
-        pointInRect(x, y, KUALI_SLOT_RECTS[toIndex])
-      ) {
-        toSlot.item = 'WRAPPED_BURGER';
-        toSlot.state = 'COOKED';
-        toSlot.progress = 0.85;
-        toSlot.burnProgress = 0;
-        toSlot.hasGarnish = false;
-        toSlot.hasSauce = false;
-        this.clearKualiSlot(fromIndex);
-        this.audio.playFlip();
-        const r = KUALI_SLOT_RECTS[toIndex];
-        this.addPopup(r.x + r.w * 0.5, r.y + 38, 'Wrapped!', '#F59E0B');
-        this.spawnParticles(r.x + r.w * 0.5, r.y + r.h * 0.5, 8, '#FDE047', 'SPARK');
-        return;
+      // Drag cooked PATTY onto any EGG slot -> WRAPPED_BURGER
+      if (fromSlot.item === 'PATTY' && fromSlot.state === 'COOKED') {
+        for (let i = 0; i < this.kuali.length; i++) {
+          if (i === fromIndex) continue;
+          const toSlot = this.kuali[i]!;
+          if (
+            toSlot.unlocked &&
+            toSlot.item === 'EGG' &&
+            toSlot.state !== 'BURNT' &&
+            pointInRect(x, y, KUALI_SLOT_RECTS[i]!)
+          ) {
+            toSlot.item = 'WRAPPED_BURGER';
+            toSlot.state = 'COOKED';
+            toSlot.progress = 0.85;
+            toSlot.burnProgress = 0;
+            toSlot.hasGarnish = false;
+            toSlot.hasSauce = false;
+            this.clearKualiSlot(fromIndex);
+            this.audio.playFlip();
+            const r = KUALI_SLOT_RECTS[i]!;
+            this.addPopup(r.x + r.w * 0.5, r.y + 26, 'Wrapped!', '#F59E0B');
+            this.spawnParticles(r.x + r.w * 0.5, r.y + r.h * 0.5, 9, '#FDE047', 'SPARK');
+            return;
+          }
+        }
       }
 
-      // Drag dressed WRAPPED_BURGER to Wrapper dock -> plate BURGER_RAMLY
+      // Drag cooked EGG onto any ROTI_CANAI plate -> ROTI_TELUR
+      if (fromSlot.item === 'EGG' && fromSlot.state === 'COOKED') {
+        for (let i = 0; i < this.plates.length; i++) {
+          const plate = this.plates[i]!;
+          if (
+            plate.unlocked &&
+            plate.dish === 'ROTI_CANAI' &&
+            pointInRect(x, y, PLATE_SLOT_RECTS[i]!)
+          ) {
+            plate.dish = 'ROTI_TELUR';
+            this.clearKualiSlot(fromIndex);
+            this.audio.playFlip();
+            const pr = PLATE_SLOT_RECTS[i]!;
+            this.addPopup(pr.x + pr.w * 0.5, pr.y + 22, 'Roti Telur!', '#FACC15');
+            this.spawnParticles(pr.x + pr.w * 0.5, pr.y + pr.h * 0.5, 9, '#FDE047', 'SPARK');
+            return;
+          }
+        }
+      }
+
+      // Drag dressed WRAPPED_BURGER onto WRAPPER dock (or open plate) -> plate BURGER_RAMLY
       if (
         fromSlot.item === 'WRAPPED_BURGER' &&
         fromSlot.state !== 'BURNT' &&
         fromSlot.hasGarnish &&
         fromSlot.hasSauce &&
-        overWrapper
+        (overWrapper || pointInRect(x, y, PLATES_RECT))
       ) {
         this.plateWrappedBurger(fromIndex);
       }
     }
   }
 
-  private plateWrappedBurger(slotIndex: 0 | 1): void {
-    if (this.plate.dish !== null) {
+  private plateWrappedBurger(slotIndex: number): void {
+    const openPlate = this.findOpenPlateSlot();
+    if (openPlate === null) {
       this.addPopup(
-        ASSEMBLY_PLATE_RECT.x + ASSEMBLY_PLATE_RECT.w * 0.5,
-        ASSEMBLY_PLATE_RECT.y + 30,
-        'Plate Full!',
+        PLATES_RECT.x + PLATES_RECT.w * 0.5,
+        PLATES_RECT.y + 30,
+        'Plates Full!',
         '#F87171'
       );
       return;
     }
-    this.plate.dish = 'BURGER_RAMLY';
+    this.plates[openPlate]!.dish = 'BURGER_RAMLY';
     this.clearKualiSlot(slotIndex);
     this.audio.playFlip();
-    this.spawnParticles(
-      ASSEMBLY_PLATE_RECT.x + ASSEMBLY_PLATE_RECT.w * 0.5,
-      ASSEMBLY_PLATE_RECT.y + ASSEMBLY_PLATE_RECT.h * 0.5,
-      8,
-      '#FDE047',
-      'SPARK'
-    );
+    const pr = PLATE_SLOT_RECTS[openPlate]!;
+    this.spawnParticles(pr.x + pr.w * 0.5, pr.y + pr.h * 0.5, 9, '#FDE047', 'SPARK');
   }
 
   private findWrappedBurger(predicate: (slot: KualiSlot) => boolean): KualiSlot | null {
     for (const slot of this.kuali) {
-      if (slot.item === 'WRAPPED_BURGER' && slot.state !== 'BURNT' && predicate(slot)) {
+      if (
+        slot.unlocked &&
+        slot.item === 'WRAPPED_BURGER' &&
+        slot.state !== 'BURNT' &&
+        predicate(slot)
+      ) {
         return slot;
       }
     }
     return null;
   }
 
-  private clearKualiSlot(slotIndex: 0 | 1): void {
-    this.kuali[slotIndex] = createEmptyKualiSlot(slotIndex);
+  private clearKualiSlot(slotIndex: number): void {
+    const slot = this.kuali[slotIndex];
+    if (!slot) return;
+    this.kuali[slotIndex] = createKualiSlot(slotIndex, slot.unlocked);
   }
 
   private getDockAtPoint(x: number, y: number): DockButtonId | null {

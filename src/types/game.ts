@@ -1,4 +1,6 @@
-export type DishType = 'ROTI_CANAI' | 'BURGER_RAMLY' | 'TEH_TARIK';
+export type DishType = 'ROTI_CANAI' | 'ROTI_TELUR' | 'BURGER_RAMLY' | 'TEH_TARIK';
+
+export type CustomerArchetype = 'PAK_CIK' | 'OFFICE_RUSH' | 'LEPAK' | 'KAKAK_FOODIE';
 
 export type KualiItemState =
   | 'RAW'
@@ -9,7 +11,8 @@ export type KualiItemState =
   | 'BURNT';
 
 export interface KualiSlot {
-  id: 0 | 1;
+  id: number;
+  unlocked: boolean;
   item: 'ROTI' | 'PATTY' | 'EGG' | 'WRAPPED_BURGER' | null;
   state: KualiItemState;
   progress: number;
@@ -28,22 +31,38 @@ export interface PrepBoardState {
 export interface TehTarikState {
   isPulling: boolean;
   fillLevel: number;
-  isReady: boolean;
+  readyCount: number;
+  maxCups: number;
   spilledTimer: number;
+  sweetMin: number;
+  sweetMax: number;
 }
 
-export interface AssemblyPlateState {
-  dish: 'ROTI_CANAI' | 'BURGER_RAMLY' | null;
+export interface ServingPlateSlot {
+  id: number;
+  unlocked: boolean;
+  dish: 'ROTI_CANAI' | 'ROTI_TELUR' | 'BURGER_RAMLY' | null;
 }
 
 export interface CustomerOrder {
   id: string;
-  slotIndex: 0 | 1 | 2;
-  archetype: 'PAK_CIK' | 'OFFICE_RUSH' | 'LEPAK';
+  slotIndex: 0 | 1 | 2 | 3;
+  archetype: CustomerArchetype;
   items: DishType[];
   fulfilled: boolean[];
   patience: number;
   maxPatience: number;
+  happyFlash: number;
+}
+
+export interface FlyingDish {
+  id: string;
+  dish: DishType;
+  startX: number;
+  startY: number;
+  targetX: number;
+  targetY: number;
+  progress: number;
 }
 
 export interface FloatingPopup {
@@ -54,6 +73,7 @@ export interface FloatingPopup {
   color: string;
   alpha: number;
   vy: number;
+  scale?: number;
 }
 
 export interface Particle {
@@ -66,24 +86,53 @@ export interface Particle {
   alpha: number;
   life: number;
   maxLife: number;
-  kind: 'SPARK' | 'STEAM' | 'STAR';
+  kind: 'SPARK' | 'STEAM' | 'STAR' | 'HEART';
+}
+
+export type UpgradeKey =
+  | 'kualiLevel'
+  | 'tehLevel'
+  | 'plateLevel'
+  | 'prepLevel'
+  | 'ingredientLevel'
+  | 'decorLevel';
+
+export interface KitchenUpgrades {
+  kualiLevel: number; // 1..3 -> 2, 3, 4 slots + faster cooking
+  tehLevel: number; // 1..3 -> 1, 2, 3 cup slots + faster pull & wider sweet spot
+  plateLevel: number; // 1..3 -> 2, 3, 4 serving plates
+  prepLevel: number; // 1..3 -> fewer swipes & more veg stock
+  ingredientLevel: number; // 1..3 -> higher dish prices
+  decorLevel: number; // 1..3 -> higher customer patience & tips
+}
+
+export interface ProgressData {
+  walletRM: number;
+  highestShift: number;
+  bestStars: Record<number, number>;
+  upgrades: KitchenUpgrades;
 }
 
 export interface GameSnapshot {
   shift: number;
   cashRM: number;
+  walletRM: number;
   targetRM: number;
   shiftTimeLeft: number;
   combo: number;
-  kuali: [KualiSlot, KualiSlot];
+  isFever: boolean;
+  kuali: KualiSlot[];
   prep: PrepBoardState;
   tehTarik: TehTarikState;
-  plate: AssemblyPlateState;
+  plates: ServingPlateSlot[];
   customers: CustomerOrder[];
+  flyingDishes: FlyingDish[];
   popups: FloatingPopup[];
   particles: Particle[];
   screenShake: number;
-  activeDrag: { source: string; dish?: DishType; x: number; y: number } | null;
+  activeDrag: { source: string; dish?: DishType; item?: string; x: number; y: number } | null;
+  upgrades: KitchenUpgrades;
+  starsEarned: number;
 }
 
 export interface AudioController {
@@ -97,4 +146,9 @@ export interface AudioController {
   playServe(combo: number): void;
   playBurn(): void;
   playSpill(): void;
+  playUpgrade(): void;
+  playFever(): void;
+  playClick(): void;
+  playShiftWin(): void;
+  playShiftFail(): void;
 }
