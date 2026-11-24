@@ -1,0 +1,9 @@
+{
+  "name": "Warung Rush",
+  "short_name": "WarungRush",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#121212",
+  "theme_color": "#F59E0B",
+  "start_url": "./"
+}
